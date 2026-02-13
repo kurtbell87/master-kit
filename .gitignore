@@ -10,3 +10,12 @@ interop/responses/*.json
 
 # Local logs
 *.log
+
+# Local MCP config/secrets
+.mcp.json
+.mcp-token
+
+# MCP service logs
+!runs/mcp-logs/
+runs/mcp-logs/*
+!runs/mcp-logs/.gitkeep
