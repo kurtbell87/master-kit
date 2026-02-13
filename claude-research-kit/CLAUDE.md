@@ -11,6 +11,8 @@
 - Don't read `QUESTIONS.md` unless you need the research agenda. `RESEARCH_LOG.md` has what's been tried.
 - Don't run training or experiments outside the experiment pipeline.
 - Don't check if dependencies are installed — they are.
+- **Don't independently verify kit sub-agent work.** Each phase (survey, frame, run, read) spawns a dedicated sub-agent that does its own verification. Trust the exit code and capsule. Do NOT re-run experiments, re-read logs, re-check metrics, or otherwise duplicate work the sub-agent already did. Exit 0 = done. Exit 1 = read the capsule for the failure, don't grep the log.
+- Don't read phase log files after a successful phase. Logs are for debugging failures only.
 
 ## Breadcrumb Maintenance (MANDATORY)
 

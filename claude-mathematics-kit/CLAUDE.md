@@ -62,6 +62,8 @@ This prevents verbose Lean4 output from flooding the orchestrator's context wind
 - **NEVER** use `axiom`, `unsafe`, `native_decide`, or `admit`
 - **NEVER** use `chmod`, `sudo`, or permission-modifying commands
 - **NEVER** use destructive git commands (`revert`, `checkout`, `restore`)
+- **Don't independently verify kit sub-agent work.** Each phase (survey, specify, construct, formalize, prove, audit) spawns a dedicated sub-agent that does its own verification. Trust the exit code and capsule. Do NOT re-run `lake build`, re-read logs, or otherwise duplicate work the sub-agent already did. Exit 0 = done. Exit 1 = read the capsule for the failure, don't grep the log.
+- Don't read phase log files after a successful phase. Logs are for debugging failures only.
 - Check current phase: `echo $MATH_PHASE`
 
 ## Breadcrumb Maintenance
