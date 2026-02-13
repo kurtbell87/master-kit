@@ -12,8 +12,9 @@
 - Don't read `PRD.md` unless you need requirements for a new feature. `LAST_TOUCH.md` has the current state.
 - Don't check if dependencies are installed — they are.
 - Don't read source files to understand architecture — read the `README.md` in each directory first.
-- **Don't independently verify kit sub-agent work.** Each phase (red, green, refactor) spawns a dedicated sub-agent that does its own verification. Trust the exit code and capsule. Do NOT re-run tests, re-read logs, re-check build output, or otherwise duplicate work the sub-agent already did. Exit 0 = done. Exit 1 = read the capsule for the failure, don't grep the log.
+- **Don't independently verify phase-agent work.** Each phase (red, green, refactor) verifies itself. Trust exit code + phase summary. Do NOT re-run tests, re-read logs, or re-check build output unless a phase failed.
 - Don't read phase log files after a successful phase. Logs are for debugging failures only.
+- Don't dump full logs into context. Use bounded inspection (`./tdd.sh watch <phase> --resolve` first).
 
 ## Breadcrumb Maintenance (MANDATORY)
 
@@ -29,6 +30,26 @@ The goal: a new agent session should be able to orient itself by reading only `C
 ## How You Work: TDD Workflow (MANDATORY)
 
 This project uses **strict red-green-refactor TDD**. You MUST follow this 4-step process for ALL new work. You do NOT implement code directly — you orchestrate the TDD pipeline.
+
+### Backend Selection (Claude or Codex)
+
+Default backend is Claude Code:
+
+```bash
+./tdd.sh red docs/<feature>.md
+```
+
+To run the same phases with Codex CLI:
+
+```bash
+TDD_AGENT_BIN=codex ./tdd.sh red docs/<feature>.md
+```
+
+You can set this once per shell:
+
+```bash
+export TDD_AGENT_BIN=codex
+```
 
 ### Step 1: Write a Spec
 
@@ -49,9 +70,7 @@ The spec should be scoped to a single deliverable unit of work. If the next task
 
 This spawns a dedicated test-author agent that reads the spec and writes failing tests. It cannot touch implementation files.
 
-**Output is a compact summary only.** The command returns the last agent message (≤500 chars), exit code, and log path. Full output is in `$TDD_LOG_DIR/red.log` — read it if you need more detail. (`TDD_LOG_DIR` defaults to `/tmp/tdd-<project-name>/`.)
-
-**IMPORTANT: Run in background and block-wait.** TDD phases spawn sub-agents that can take 10+ minutes. The Bash tool has a 10-minute timeout, so you MUST use `run_in_background: true`. Then immediately call `TaskOutput` with `block: true` and `timeout: 600000` (10 min) to wait for completion. If `TaskOutput` times out, call it again with the same parameters — repeat until the task finishes. Do NOT poll with short timeouts or sleep loops.
+**Output is compact by design.** The command returns a short phase summary, exit code, and log path. Full output is in `$TDD_LOG_DIR/red.log` (default `/tmp/tdd-<project>/`).
 
 ### Step 3: GREEN — Implement to Pass
 
@@ -63,9 +82,7 @@ This spawns a dedicated test-author agent that reads the spec and writes failing
 
 This spawns a dedicated implementation agent. Test files are OS-locked (read-only). The agent writes the minimum code to make all tests pass.
 
-**Output is a compact summary only.** The command returns the last agent message (≤500 chars), exit code, and log path. Full output is in `$TDD_LOG_DIR/green.log` — read it if you need more detail.
-
-**IMPORTANT: Run in background and block-wait.** This is typically the longest phase. Use `run_in_background: true`, then block-wait with `TaskOutput(block: true, timeout: 600000)`. Repeat if it times out.
+**Output is compact by design.** Full details are in `$TDD_LOG_DIR/green.log`.
 
 ### Step 4: REFACTOR — Improve Quality
 
@@ -77,37 +94,28 @@ This spawns a dedicated implementation agent. Test files are OS-locked (read-onl
 
 This spawns a dedicated refactoring agent that improves code quality while keeping all tests green.
 
-**Output is a compact summary only.** The command returns the last agent message (≤500 chars), exit code, and log path. Full output is in `$TDD_LOG_DIR/refactor.log` — read it if you need more detail.
-
-**IMPORTANT: Run in background and block-wait.** Use `run_in_background: true`, then block-wait with `TaskOutput(block: true, timeout: 600000)`. Repeat if it times out.
+**Output is compact by design.** Full details are in `$TDD_LOG_DIR/refactor.log`.
 
 ### Step 5: SHIP — Commit, PR, Archive
 
-After the refactor phase, ship the results:
+After refactor, ship the results:
 
 ```bash
 ./tdd.sh ship docs/<feature>.md
 ```
 
-This creates a feature branch (`tdd/<feature>`), commits all changes, opens a PR, and deletes the spec file from the working tree (it's preserved in git history).
+This creates a feature branch (`tdd/<feature>`), commits all changes, opens a PR, and deletes the spec file from the working tree (preserved in git history).
 
-Configure auto-merge and branch cleanup via environment variables:
+Configure via env vars:
 - `TDD_AUTO_MERGE=true` — auto-merge the PR after creation
 - `TDD_DELETE_BRANCH=true` — delete the feature branch after merge
-- `TDD_BASE_BRANCH=main` — base branch for PRs (default: `main`)
+- `TDD_BASE_BRANCH=main` — base branch for PRs
 
-Or run all phases including ship in one command: `./tdd.sh full docs/<feature>.md`
-
-### After the Cycle
-
-- Update `LAST_TOUCH.md` with what was built and the new project state.
-- Update `CLAUDE.md` "Current State" section with new test counts and next task.
-- If more work remains, go back to Step 1 with the next spec.
+Or run all phases in one command: `./tdd.sh full docs/<feature>.md`
 
 ### Critical Rules
 
-- **You are the orchestrator, not the implementor.** Steps 2-4 MUST use `./tdd.sh` commands. Do not bypass the pipeline by writing tests or implementation code directly.
-- **Step 1 is the only step where you write files** (the spec).
+- **You are the orchestrator, not the implementor.** Steps 2-4 MUST use `./tdd.sh` commands.
+- **Step 1 is the only step where you write files directly** (the spec).
 - **One spec per cycle.** Don't try to spec everything at once.
-- **Always run `./tdd.sh` with `run_in_background: true`**, then block-wait with `TaskOutput(block: true, timeout: 600000)`. Repeat the `TaskOutput` call if it times out. Do NOT poll with short intervals.
-- If a `./tdd.sh` phase fails or produces incomplete results, diagnose the issue, fix the spec or environment, and re-run the phase. Do not manually patch implementation code outside the pipeline.
+- If a `./tdd.sh` phase fails, diagnose and re-run the phase. Do not manually patch implementation code outside the pipeline.

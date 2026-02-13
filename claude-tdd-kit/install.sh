@@ -120,6 +120,12 @@ upgrade_machinery         "$KIT_DIR/.claude/prompts/tdd-red.md"        "$TARGET_
 upgrade_machinery         "$KIT_DIR/.claude/prompts/tdd-green.md"      "$TARGET_DIR/.claude/prompts/tdd-green.md"
 upgrade_machinery         "$KIT_DIR/.claude/prompts/tdd-refactor.md"   "$TARGET_DIR/.claude/prompts/tdd-refactor.md"
 
+echo ""
+echo -e "${BOLD}Codex prompt pack:${NC}"
+upgrade_machinery         "$KIT_DIR/.codex/prompts/tdd-red.md"        "$TARGET_DIR/.codex/prompts/tdd-red.md"
+upgrade_machinery         "$KIT_DIR/.codex/prompts/tdd-green.md"      "$TARGET_DIR/.codex/prompts/tdd-green.md"
+upgrade_machinery         "$KIT_DIR/.codex/prompts/tdd-refactor.md"   "$TARGET_DIR/.codex/prompts/tdd-refactor.md"
+
 # ── Settings (config) ──
 if [[ "$UPGRADE" == "true" ]]; then
   upgrade_config "$KIT_DIR/.claude/settings.json" "$TARGET_DIR/.claude/settings.json"
@@ -130,7 +136,7 @@ elif [[ -f "$TARGET_DIR/.claude/settings.json" ]]; then
   echo ""
   echo '    "hooks": {'
   echo '      "PreToolUse": [{'
-  echo '        "matcher": "Edit|Write|MultiEdit|Bash",'
+  echo '        "matcher": "Read|Edit|Write|MultiEdit|Bash",'
   echo '        "hooks": [{"type": "command", "command": ".claude/hooks/pre-tool-use.sh"}]'
   echo '      }]'
   echo '    }'
@@ -157,6 +163,19 @@ else
   echo -e "  ${GREEN}created:${NC} CLAUDE.md"
 fi
 
+
+# ── AGENTS.md handling (Codex CLI) ──
+if [[ -f "$TARGET_DIR/AGENTS.md" ]]; then
+  echo ""
+  echo -e "  ${YELLOW}exists:${NC}  AGENTS.md"
+  echo -e "  ${YELLOW}ACTION NEEDED:${NC} Append the TDD workflow to your AGENTS.md."
+  echo -e "  The snippet is at: ${BLUE}templates/AGENTS.md.snippet${NC}"
+  echo -e "  Or run: cat '$KIT_DIR/templates/AGENTS.md.snippet' >> AGENTS.md"
+else
+  cp "$KIT_DIR/templates/AGENTS.md.snippet" "$TARGET_DIR/AGENTS.md"
+  echo -e "  ${GREEN}created:${NC} AGENTS.md"
+fi
+
 # ── Create docs/ directory for specs ──
 mkdir -p "$TARGET_DIR/docs"
 echo -e "  ${GREEN}ready:${NC}   docs/ (place your spec files here)"
@@ -171,7 +190,8 @@ echo -e "  2. Edit ${BLUE}LAST_TOUCH.md${NC} with your current project state"
 echo -e "  3. Configure build/test commands in ${BLUE}tdd.sh${NC}:"
 echo -e "     - Set ${BOLD}BUILD_CMD${NC} and ${BOLD}TEST_CMD${NC} for your project"
 echo -e "     - Set ${BOLD}TEST_DIRS${NC} if your tests aren't in tests/"
-echo -e "  4. Optionally source the aliases: ${BLUE}source tdd-aliases.sh${NC}"
-echo -e "  5. Write your first spec: ${BLUE}docs/my-feature.md${NC}"
-echo -e "  6. Run: ${BLUE}./tdd.sh red docs/my-feature.md${NC}"
+echo -e "  4. Optional backend switch: set ${BOLD}TDD_AGENT_BIN=codex${NC} for Codex CLI"
+echo -e "  5. Optionally source the aliases: ${BLUE}source tdd-aliases.sh${NC}"
+echo -e "  6. Write your first spec: ${BLUE}docs/my-feature.md${NC}"
+echo -e "  7. Run: ${BLUE}./tdd.sh red docs/my-feature.md${NC}"
 echo ""

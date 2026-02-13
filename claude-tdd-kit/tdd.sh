@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# tdd.sh -- TDD Workflow Orchestrator for Claude Code
+# tdd.sh -- TDD Workflow Orchestrator for Claude Code and Codex CLI
 #
 # Usage:
 #   ./tdd.sh red   <spec-file>     # Write tests from spec
-#   ./tdd.sh green                  # Implement to pass tests
-#   ./tdd.sh refactor               # Refactor while keeping tests green
-#   ./tdd.sh ship  <spec-file>      # Commit, create PR, archive spec
-#   ./tdd.sh full  <spec-file>      # Run all four phases sequentially
+#   ./tdd.sh green                 # Implement to pass tests
+#   ./tdd.sh refactor              # Refactor while keeping tests green
+#   ./tdd.sh ship  <spec-file>     # Commit, create PR, archive spec
+#   ./tdd.sh full  <spec-file>     # Run all four phases sequentially
 #   ./tdd.sh watch [phase] [--resolve]  # Live-tail or summarize a phase log
 #
 # Configure via environment variables or edit the defaults below.
@@ -18,8 +18,19 @@ set -euo pipefail
 # ──────────────────────────────────────────────────────────────
 TEST_DIRS="${TEST_DIRS:-tests}"                  # Space-separated test directories
 SRC_DIR="${SRC_DIR:-src}"                        # Source/implementation directory
-PROMPT_DIR=".claude/prompts"                     # Phase-specific prompt files
-HOOK_DIR=".claude/hooks"                         # Hook scripts
+PROMPT_DIR="${PROMPT_DIR:-.claude/prompts}"      # Phase-specific prompt files
+HOOK_DIR="${HOOK_DIR:-.claude/hooks}"            # Hook scripts
+
+# Agent backend
+# Supported values: claude, codex
+TDD_AGENT_BIN="${TDD_AGENT_BIN:-claude}"
+TDD_AGENT_EXTRA_ARGS="${TDD_AGENT_EXTRA_ARGS:-}"
+
+# Optional codex-specific prompt pack. If PROMPT_DIR was not overridden and
+# codex prompts exist, prefer them when TDD_AGENT_BIN=codex.
+if [[ "$TDD_AGENT_BIN" == "codex" && "$PROMPT_DIR" == ".claude/prompts" && -d ".codex/prompts" ]]; then
+  PROMPT_DIR=".codex/prompts"
+fi
 
 # Test file patterns (find-compatible)
 TEST_FILE_PATTERNS=(
@@ -43,13 +54,11 @@ BUILD_CMD="${BUILD_CMD:-echo 'Set BUILD_CMD for your project'}"
 TEST_CMD="${TEST_CMD:-echo 'Set TEST_CMD for your project'}"
 
 # Log directory -- per-project isolation under /tmp
-# Uses repo basename + short hash of absolute path to prevent collisions
-# between projects with the same name in different locations.
-# Override with TDD_LOG_DIR env var if needed.
+# Uses repo basename for per-project isolation
+# Override with TDD_LOG_DIR if you need a different path.
 _project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 _project_name="$(basename "$_project_root")"
-_project_hash="$(printf '%s' "$_project_root" | shasum -a 256 | cut -c1-6)"
-TDD_LOG_DIR="${TDD_LOG_DIR:-/tmp/tdd-${_project_name}-${_project_hash}}"
+TDD_LOG_DIR="${TDD_LOG_DIR:-/tmp/tdd-${_project_name}}"
 export TDD_LOG_DIR
 mkdir -p "$TDD_LOG_DIR"
 
@@ -129,16 +138,122 @@ ensure_hooks_executable() {
   fi
 }
 
+_run_codex_agent() {
+  local phase="$1"
+  local system_prompt="$2"
+  local user_prompt="$3"
+  local allowed_tools="$4"
+  local log_file="$5"
+  local phase_upper
+  phase_upper="$(printf '%s' "$phase" | tr '[:lower:]' '[:upper:]')"
+
+  if ! command -v codex >/dev/null 2>&1; then
+    echo -e "${RED}Error: codex CLI not found in PATH.${NC}" >&2
+    return 127
+  fi
+
+  local help_out
+  help_out="$(codex --help 2>&1 || true)"
+
+  local prompt_file
+  prompt_file="$(mktemp)"
+  cat > "$prompt_file" <<PROMPT
+You are running the ${phase_upper} phase of a strict TDD workflow.
+Follow all instructions below exactly.
+
+## System Instructions
+$system_prompt
+
+## Compatibility Notes
+- Allowed tools in the original workflow: $allowed_tools
+- Keep output concise and action-oriented.
+
+## Task
+$user_prompt
+PROMPT
+
+  local rc=0
+  if echo "$help_out" | grep -Eq -- '(^|[[:space:]])exec([[:space:]]|$)'; then
+    if [[ -n "$TDD_AGENT_EXTRA_ARGS" ]]; then
+      # shellcheck disable=SC2086
+      codex $TDD_AGENT_EXTRA_ARGS exec "$(cat "$prompt_file")" > "$log_file" 2>&1 || rc=$?
+    else
+      codex exec "$(cat "$prompt_file")" > "$log_file" 2>&1 || rc=$?
+    fi
+  elif echo "$help_out" | grep -Eq -- '(^|[[:space:]])-p([[:space:]]|,|$)'; then
+    if [[ -n "$TDD_AGENT_EXTRA_ARGS" ]]; then
+      # shellcheck disable=SC2086
+      codex $TDD_AGENT_EXTRA_ARGS -p "$(cat "$prompt_file")" > "$log_file" 2>&1 || rc=$?
+    else
+      codex -p "$(cat "$prompt_file")" > "$log_file" 2>&1 || rc=$?
+    fi
+  else
+    if [[ -n "$TDD_AGENT_EXTRA_ARGS" ]]; then
+      # shellcheck disable=SC2086
+      codex $TDD_AGENT_EXTRA_ARGS "$(cat "$prompt_file")" > "$log_file" 2>&1 || rc=$?
+    else
+      codex "$(cat "$prompt_file")" > "$log_file" 2>&1 || rc=$?
+    fi
+  fi
+
+  rm -f "$prompt_file"
+  return "$rc"
+}
+
+run_agent() {
+  local phase="$1"
+  local system_prompt="$2"
+  local user_prompt="$3"
+  local allowed_tools="$4"
+  local log_file="$TDD_LOG_DIR/${phase}.log"
+  local exit_code=0
+
+  case "$TDD_AGENT_BIN" in
+    claude)
+      if ! command -v claude >/dev/null 2>&1; then
+        echo -e "${RED}Error: claude CLI not found in PATH.${NC}" >&2
+        return 127
+      fi
+      if [[ -n "$TDD_AGENT_EXTRA_ARGS" ]]; then
+        # shellcheck disable=SC2086
+        claude \
+          --output-format stream-json \
+          --append-system-prompt "$system_prompt" \
+          --allowed-tools "$allowed_tools" \
+          $TDD_AGENT_EXTRA_ARGS \
+          -p "$user_prompt" \
+          > "$log_file" 2>&1 || exit_code=$?
+      else
+        claude \
+          --output-format stream-json \
+          --append-system-prompt "$system_prompt" \
+          --allowed-tools "$allowed_tools" \
+          -p "$user_prompt" \
+          > "$log_file" 2>&1 || exit_code=$?
+      fi
+      ;;
+    codex)
+      _run_codex_agent "$phase" "$system_prompt" "$user_prompt" "$allowed_tools" "$log_file" || exit_code=$?
+      ;;
+    *)
+      echo -e "${RED}Error: Unsupported TDD_AGENT_BIN '$TDD_AGENT_BIN'. Use 'claude' or 'codex'.${NC}" >&2
+      return 2
+      ;;
+  esac
+
+  return "$exit_code"
+}
+
 _phase_summary() {
-  # Extract the final agent message from the stream-json log and print a
-  # compact summary.  This keeps the orchestrator's context window lean —
-  # the full transcript stays on disk at $TDD_LOG_DIR/{phase}.log.
+  # Extract the final agent message from logs and print a compact summary.
+  # For Claude stream-json logs, parse assistant text.
+  # For plain text logs (e.g., codex), fall back to the last non-empty line.
   local phase="$1"
   local exit_code="$2"
   local log="$TDD_LOG_DIR/${phase}.log"
 
   local summary
-  summary=$(tail -20 "$log" 2>/dev/null | python3 -c "
+  summary="$(tail -20 "$log" 2>/dev/null | python3 -c "
 import json, sys
 texts = []
 for line in sys.stdin:
@@ -152,7 +267,11 @@ for line in sys.stdin:
         pass
 if texts:
     print(texts[-1][:500])
-" 2>/dev/null)
+" 2>/dev/null)"
+
+  if [[ -z "$summary" ]]; then
+    summary="$(tail -40 "$log" 2>/dev/null | sed '/^[[:space:]]*$/d' | tail -1 | cut -c1-500)"
+  fi
 
   if [[ -n "$summary" ]]; then
     printf '%b%s%b\n' "${YELLOW}[${phase}]${NC} " "$summary" ""
@@ -186,10 +305,8 @@ run_red() {
 
   export TDD_PHASE="red"
 
-  local exit_code=0
-  claude \
-    --output-format stream-json \
-    --append-system-prompt "$(cat "$PROMPT_DIR/tdd-red.md")
+  local system_prompt
+  system_prompt="$(cat "$PROMPT_DIR/tdd-red.md")
 
 ## Context
 - Design spec path: $spec_file
@@ -198,10 +315,13 @@ run_red() {
 - Test command: $TEST_CMD
 - Existing test files: $(find_test_files | wc -l | tr -d ' ') file(s) in $TEST_DIRS (use Glob to discover)
 
-Read the spec file first, then write your tests." \
-    --allowed-tools "Read,Write,Edit,Bash" \
-    -p "Read the spec file first, then write your tests." \
-    > "$TDD_LOG_DIR/red.log" 2>&1 || exit_code=$?
+Read the spec file first, then write your tests."
+
+  local user_prompt
+  user_prompt="Read the spec file first, then write your tests."
+
+  local exit_code=0
+  run_agent "red" "$system_prompt" "$user_prompt" "Read,Write,Edit,Bash" || exit_code=$?
 
   _phase_summary "red" "$exit_code"
 }
@@ -232,10 +352,8 @@ run_green() {
   # Unlock on exit regardless of success/failure
   trap unlock_tests EXIT
 
-  local exit_code=0
-  claude \
-    --output-format stream-json \
-    --append-system-prompt "$(cat "$PROMPT_DIR/tdd-green.md")
+  local system_prompt
+  system_prompt="$(cat "$PROMPT_DIR/tdd-green.md")
 
 ## Context
 - Source directory: $SRC_DIR
@@ -245,10 +363,13 @@ run_green() {
 - Full test log: $TDD_LOG_DIR/test-output.log (Read this file for detailed failure tracebacks)
 - Test files: $(find_test_files | wc -l | tr -d ' ') file(s) in $TEST_DIRS (use Glob to discover)
 
-Start by reading the test files to understand what's expected, then implement iteratively. Always use the test command above — it prints a compact summary. If you need full tracebacks, Read $TDD_LOG_DIR/test-output.log." \
-    --allowed-tools "Read,Write,Edit,Bash" \
-    -p "Read the test files to understand what's expected, then implement iteratively." \
-    > "$TDD_LOG_DIR/green.log" 2>&1 || exit_code=$?
+Start by reading the test files to understand what's expected, then implement iteratively. Always use the test command above — it prints a compact summary. If you need full tracebacks, Read $TDD_LOG_DIR/test-output.log."
+
+  local user_prompt
+  user_prompt="Read the test files to understand what's expected, then implement iteratively."
+
+  local exit_code=0
+  run_agent "green" "$system_prompt" "$user_prompt" "Read,Write,Edit,Bash" || exit_code=$?
 
   _phase_summary "green" "$exit_code"
 }
@@ -266,10 +387,8 @@ run_refactor() {
 
   export TDD_PHASE="refactor"
 
-  local exit_code=0
-  claude \
-    --output-format stream-json \
-    --append-system-prompt "$(cat "$PROMPT_DIR/tdd-refactor.md")
+  local system_prompt
+  system_prompt="$(cat "$PROMPT_DIR/tdd-refactor.md")
 
 ## Context
 - Source directory: $SRC_DIR
@@ -278,10 +397,13 @@ run_refactor() {
 - Test command: ./scripts/test-summary.sh $TEST_CMD
 - Full test log: $TDD_LOG_DIR/test-output.log (Read this file for detailed failure tracebacks)
 
-Start by running the full test suite to confirm your green baseline, then refactor. Always use the test command above — it prints a compact summary." \
-    --allowed-tools "Read,Write,Edit,Bash" \
-    -p "Run the full test suite to confirm your green baseline, then refactor." \
-    > "$TDD_LOG_DIR/refactor.log" 2>&1 || exit_code=$?
+Start by running the full test suite to confirm your green baseline, then refactor. Always use the test command above — it prints a compact summary."
+
+  local user_prompt
+  user_prompt="Run the full test suite to confirm your green baseline, then refactor."
+
+  local exit_code=0
+  run_agent "refactor" "$system_prompt" "$user_prompt" "Read,Write,Edit,Bash" || exit_code=$?
 
   _phase_summary "refactor" "$exit_code"
 }
@@ -422,13 +544,15 @@ case "${1:-help}" in
     echo "  watch [phase]       Live-tail a running phase (--resolve for summary)"
     echo ""
     echo "Environment:"
-    echo "  TEST_DIRS='tests'           Test directories (space-separated)"
-    echo "  SRC_DIR='src'               Source directory"
-    echo "  BUILD_CMD='make'            Build command"
-    echo "  TEST_CMD='make test'        Test runner command"
-    echo "  TDD_LOG_DIR='/tmp/tdd-<project>'  Log directory (auto-derived from repo name)"
-    echo "  TDD_AUTO_MERGE='false'      Auto-merge PR after creation"
-    echo "  TDD_DELETE_BRANCH='false'   Delete feature branch after merge"
-    echo "  TDD_BASE_BRANCH='main'      Base branch for PRs"
+    echo "  TEST_DIRS='tests'                   Test directories (space-separated)"
+    echo "  SRC_DIR='src'                       Source directory"
+    echo "  BUILD_CMD='make'                    Build command"
+    echo "  TEST_CMD='make test'                Test runner command"
+    echo "  TDD_AGENT_BIN='claude'              Agent backend: claude|codex"
+    echo "  TDD_AGENT_EXTRA_ARGS=''             Extra args passed to the selected agent CLI"
+    echo "  TDD_LOG_DIR='/tmp/tdd-<project>'  Log directory"
+    echo "  TDD_AUTO_MERGE='false'              Auto-merge PR after creation"
+    echo "  TDD_DELETE_BRANCH='false'           Delete feature branch after merge"
+    echo "  TDD_BASE_BRANCH='main'              Base branch for PRs"
     ;;
 esac

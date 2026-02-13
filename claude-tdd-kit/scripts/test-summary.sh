@@ -10,9 +10,10 @@
 
 set -uo pipefail
 
-# Use TDD_LOG_DIR from environment (set by tdd.sh), fall back to per-project default
+# Use TDD_LOG_DIR from environment (set by tdd.sh), fall back to per-project path.
 if [[ -z "${TDD_LOG_DIR:-}" ]]; then
-  _project_name="$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")"
+  _project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  _project_name="$(basename "$_project_root")"
   TDD_LOG_DIR="/tmp/tdd-${_project_name}"
 fi
 mkdir -p "$TDD_LOG_DIR"
