@@ -155,9 +155,9 @@ if texts:
 " 2>/dev/null)
 
   if [[ -n "$summary" ]]; then
-    echo -e "${YELLOW}[${phase}]${NC} $summary"
+    printf '%b%s%b\n' "${YELLOW}[${phase}]${NC} " "$summary" ""
   fi
-  echo -e "${YELLOW}[${phase}]${NC} Phase complete (exit: $exit_code). Log: $log"
+  printf '%b\n' "${YELLOW}[${phase}]${NC} Phase complete (exit: $exit_code). Log: $log"
   return "$exit_code"
 }
 

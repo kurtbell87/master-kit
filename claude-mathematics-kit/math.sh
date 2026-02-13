@@ -92,11 +92,14 @@ end_phase_timer() {
 }
 
 validate_build_env() {
-  # R3.5: Verify lake can resolve paths before attempting builds
-  if ! lake env printPaths >/dev/null 2>&1; then
-    echo -e "${RED}Error: 'lake env printPaths' failed.${NC}" >&2
-    echo -e "The Lean4 toolchain may be misconfigured." >&2
-    echo -e "Try: elan default leanprover/lean4:stable" >&2
+  # Verify lake can resolve the project before attempting builds.
+  # Lake 5.x removed `env printPaths`; use `lake resolve-deps` as a
+  # lightweight probe that works across Lake 4.x and 5.x.
+  if ! lake resolve-deps >/dev/null 2>&1; then
+    echo -e "${RED}Error: 'lake resolve-deps' failed.${NC}" >&2
+    echo -e "No lakefile found or the Lean4 toolchain is misconfigured." >&2
+    echo -e "Try: lake init <name> math   (to create a Lean4 project)" >&2
+    echo -e "  or: elan default leanprover/lean4:stable" >&2
     return 1
   fi
 }
@@ -359,9 +362,9 @@ if texts:
 " 2>/dev/null)
 
   if [[ -n "$summary" ]]; then
-    echo -e "${YELLOW}[${phase}]${NC} $summary"
+    printf '%b%s%b\n' "${YELLOW}[${phase}]${NC} " "$summary" ""
   fi
-  echo -e "${YELLOW}[${phase}]${NC} Phase complete (exit: $exit_code). Log: $log"
+  printf '%b\n' "${YELLOW}[${phase}]${NC} Phase complete (exit: $exit_code). Log: $log"
   return "$exit_code"
 }
 
