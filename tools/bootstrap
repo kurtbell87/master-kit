@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+# Monorepo bootstrap for master-kit.
+#
+# This script intentionally does NOT call per-kit install.sh scripts.
+# In monorepo mode, root .claude settings/hooks and tools/* are source-controlled.
+#
+# Usage:
+#   tools/bootstrap
+#   tools/bootstrap --check-only
+#   tools/bootstrap --skip-smoke
+#   tools/bootstrap --install-python
+
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+CHECK_ONLY=0
+SKIP_SMOKE=0
+INSTALL_PYTHON=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --check-only)
+      CHECK_ONLY=1
+      shift
+      ;;
+    --skip-smoke)
+      SKIP_SMOKE=1
+      shift
+      ;;
+    --install-python)
+      INSTALL_PYTHON=1
+      shift
+      ;;
+    -h|--help)
+      cat <<'USAGE'
+Usage: tools/bootstrap [options]
+
+Options:
+  --check-only      Run checks only (no chmod fixes, no installs, no smoke run).
+  --skip-smoke      Skip tools/smoke-run.
+  --install-python  Install dependencies from requirements.txt if present.
+  -h, --help        Show this help text.
+USAGE
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+fail() {
+  echo "[bootstrap] ERROR: $*" >&2
+  exit 1
+}
+
+have_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+print_version() {
+  local label="$1"
+  shift
+  local bin="$1"
+  shift
+  if have_cmd "$bin"; then
+    local out
+    out="$("$bin" "$@" 2>/dev/null | head -n 1 || true)"
+    if [[ -z "$out" ]]; then
+      out="(version unavailable)"
+    fi
+    echo "[bootstrap] ${label}: $out"
+  else
+    echo "[bootstrap] ${label}: NOT FOUND"
+  fi
+}
+
+require_file() {
+  local file="$1"
+  [[ -f "$file" ]] || fail "Missing required file: $file"
+}
+
+require_executable() {
+  local file="$1"
+  [[ -x "$file" ]] || fail "Missing executable bit: $file"
+}
+
+chmod_if_exists() {
+  local path="$1"
+  if [[ -e "$path" ]]; then
+    chmod +x "$path" || fail "Failed to chmod $path"
+  fi
+}
+
+echo "[bootstrap] root=$ROOT_DIR"
+echo "[bootstrap] mode: monorepo bootstrap (no per-kit install.sh)"
+
+require_file ".claude/settings.json"
+require_file ".claude/hooks/pre-tool-use.sh"
+require_file "tools/kit"
+require_file "tools/pump"
+require_file "tools/smoke-run"
+
+if ! grep -q '".claude/hooks/pre-tool-use.sh"' ".claude/settings.json"; then
+  fail ".claude/settings.json does not reference the master hook path"
+fi
+echo "[bootstrap] settings check: master hook reference present"
+
+print_version "python3" python3 --version
+print_version "claude" claude --version
+print_version "gh" gh --version
+print_version "lake" lake --version
+print_version "elan" elan --version
+
+if [[ "$CHECK_ONLY" -eq 0 ]]; then
+  chmod +x tools/* || fail "Failed to chmod tools/*"
+  chmod +x .claude/hooks/pre-tool-use.sh || fail "Failed to chmod master hook"
+  chmod +x claude-tdd-kit/.claude/hooks/pre-tool-use.sh || fail "Failed to chmod tdd hook"
+  chmod +x claude-research-kit/.claude/hooks/pre-tool-use.sh || fail "Failed to chmod research hook"
+  chmod +x claude-mathematics-kit/.claude/hooks/pre-tool-use.sh || fail "Failed to chmod math hook"
+
+  for script in claude-tdd-kit/*.sh claude-research-kit/*.sh claude-mathematics-kit/*.sh; do
+    chmod_if_exists "$script"
+  done
+
+  while IFS= read -r script; do
+    chmod +x "$script" || fail "Failed to chmod $script"
+  done < <(find claude-tdd-kit/scripts claude-research-kit/scripts claude-mathematics-kit/scripts -type f -name '*.sh' 2>/dev/null)
+
+  echo "[bootstrap] executable bits refreshed"
+else
+  echo "[bootstrap] check-only mode: skipping chmod operations"
+fi
+
+require_executable "tools/kit"
+require_executable "tools/pump"
+require_executable "tools/smoke-run"
+require_executable ".claude/hooks/pre-tool-use.sh"
+echo "[bootstrap] executable checks: ok"
+
+if [[ "$INSTALL_PYTHON" -eq 1 ]]; then
+  if [[ -f "requirements.txt" ]]; then
+    if [[ "$CHECK_ONLY" -eq 1 ]]; then
+      echo "[bootstrap] check-only mode: would run python3 -m pip install -r requirements.txt"
+    else
+      python3 -m pip install -r requirements.txt
+    fi
+  else
+    echo "[bootstrap] requirements.txt not found, skipping Python dependency install"
+  fi
+fi
+
+if [[ "$SKIP_SMOKE" -eq 1 ]]; then
+  echo "[bootstrap] smoke run skipped"
+elif [[ "$CHECK_ONLY" -eq 1 ]]; then
+  echo "[bootstrap] check-only mode: would run tools/smoke-run"
+else
+  echo "[bootstrap] running smoke validation"
+  tools/smoke-run
+fi
+
+echo "[bootstrap] done"

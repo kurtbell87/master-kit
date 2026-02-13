@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "master-kit MCP tool contracts",
+  "type": "object",
+  "properties": {
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "master.run",
+              "master.request_create",
+              "master.pump",
+              "master.run_info",
+              "master.query_log"
+            ]
+          },
+          "inputSchema": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "inputSchema"
+        ]
+      }
+    }
+  },
+  "required": [
+    "tools"
+  ]
+}
