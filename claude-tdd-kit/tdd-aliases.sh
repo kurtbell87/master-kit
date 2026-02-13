@@ -9,6 +9,7 @@
 #   tdd-refactor
 #   tdd-ship docs/my-feature.md
 #   tdd-full docs/my-feature.md
+#   tddc-red docs/my-feature.md   # same phases via Codex backend
 #   tdd-status
 #   tdd-unlock
 
@@ -19,12 +20,19 @@ alias tdd-green='bash $TDD_SCRIPT green'
 alias tdd-refactor='bash $TDD_SCRIPT refactor'
 alias tdd-ship='bash $TDD_SCRIPT ship'
 alias tdd-full='bash $TDD_SCRIPT full'
+alias tddc-red='TDD_AGENT_BIN=codex bash $TDD_SCRIPT red'
+alias tddc-green='TDD_AGENT_BIN=codex bash $TDD_SCRIPT green'
+alias tddc-refactor='TDD_AGENT_BIN=codex bash $TDD_SCRIPT refactor'
+alias tddc-ship='TDD_AGENT_BIN=codex bash $TDD_SCRIPT ship'
+alias tddc-full='TDD_AGENT_BIN=codex bash $TDD_SCRIPT full'
 
 tdd-status() {
   echo "TDD Status"
   echo "==========="
   echo ""
   echo "Phase: ${TDD_PHASE:-not set}"
+  echo "Agent backend: ${TDD_AGENT_BIN:-claude}"
+  echo "Log dir: ${TDD_LOG_DIR:-/tmp/tdd-<project>}"
   echo ""
   echo "Test files:"
   find . -type f \( \

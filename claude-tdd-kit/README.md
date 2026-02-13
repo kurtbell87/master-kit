@@ -1,31 +1,37 @@
 # Claude TDD Kit
 
-Role-focused red-green-refactor orchestration for Claude Code.
+Strict red-green-refactor orchestration for AI coding agents with role separation, test immutability in GREEN, compact phase summaries, and token-bloat guardrails.
 
-## Monorepo Context
+Supports both:
+- Claude Code CLI (`claude`)
+- Codex CLI (`codex`)
 
-This kit can run standalone, but in this repository it is usually orchestrated by Master-Kit.
+## Why this kit exists
 
-- Repository overview: `../README.md`
-- Canonical PRD: `../docs/PRD_MASTER_KIT.md`
+This kit is tuned for constrained context windows:
+- Each phase writes full output to log files, while stdout returns only a compact summary.
+- GREEN phase enforces immutable tests at OS + hook layers.
+- Hook guardrails can block oversized reads and optionally enforce read budgets.
+- Workflow guidance strongly discourages re-verification loops and unnecessary log reads.
 
-## Phase Model
+## Phase model
 
 | Phase | Command | Purpose |
 |---|---|---|
 | RED | `./tdd.sh red <spec-file>` | Write failing tests from spec |
-| GREEN | `./tdd.sh green` | Implement to make tests pass |
-| REFACTOR | `./tdd.sh refactor` | Improve implementation with tests still green |
-| SHIP | `./tdd.sh ship <spec-file>` | Commit, PR, archive spec |
+| GREEN | `./tdd.sh green` | Implement to pass tests |
+| REFACTOR | `./tdd.sh refactor` | Improve design while tests stay green |
+| SHIP | `./tdd.sh ship <spec-file>` | Commit, create PR, archive spec |
 | FULL | `./tdd.sh full <spec-file>` | Run RED -> GREEN -> REFACTOR -> SHIP |
 
-## Quick Start
+## Quick start
 
 ```bash
-# Configure for your project
+# In your project root
+/path/to/claude-tdd-kit/install.sh
+
+# Configure project commands
 $EDITOR tdd.sh
-$EDITOR PRD.md
-$EDITOR LAST_TOUCH.md
 
 # Run one cycle
 ./tdd.sh red docs/my-feature.md
@@ -34,7 +40,36 @@ $EDITOR LAST_TOUCH.md
 ./tdd.sh ship docs/my-feature.md
 ```
 
-## Watch and Logs
+## Claude vs Codex backend
+
+Default backend is Claude:
+
+```bash
+./tdd.sh red docs/my-feature.md
+```
+
+Run the same workflow with Codex:
+
+```bash
+TDD_AGENT_BIN=codex ./tdd.sh red docs/my-feature.md
+TDD_AGENT_BIN=codex ./tdd.sh green
+TDD_AGENT_BIN=codex ./tdd.sh refactor
+```
+
+Optional shell-level default:
+
+```bash
+export TDD_AGENT_BIN=codex
+```
+
+## Logs, summaries, and watch mode
+
+- Full phase logs: `$TDD_LOG_DIR/{red,green,refactor}.log`
+- Full test output: `$TDD_LOG_DIR/test-output.log`
+- Default log dir: `/tmp/tdd-<project>/`
+- Phase stdout: compact summary only (for context efficiency)
+
+Watch a running/finished phase:
 
 ```bash
 ./tdd.sh watch green
@@ -42,20 +77,34 @@ $EDITOR LAST_TOUCH.md
 ./tdd.sh watch red --resolve
 ```
 
-- Phase logs: `$TDD_LOG_DIR/{phase}.log` (default `/tmp/tdd-<project>/`)
-- Stdout remains compact by design (summary + exit code + log path)
+## Token-bloat guardrails
 
-## Guardrails
+Hook protections are active through `.claude/hooks/pre-tool-use.sh`:
 
-Defense in depth:
+1. GREEN test immutability enforcement:
+- Blocks direct test edits/writes.
+- Blocks chmod/chown/sudo and revert-style git commands.
 
-1. Phase-specific prompts
-2. OS permissions (`chmod 444` on test files during GREEN)
-3. Pre-tool-use hook blocks test modification bypasses (`chmod`, destructive git, test-file writes)
+2. Global read guardrails (all phases):
+- Blocks single-file reads over `MAX_READ_BYTES` (default: `200000`).
+- Optional read budgets via:
+  - `READ_BUDGET_MAX_FILES`
+  - `READ_BUDGET_MAX_TOTAL_BYTES`
+- Allowlist override via:
+  - `READ_ALLOW_GLOBS`
+  - `MUST_READ_ALLOWLIST`
+
+Recommended strict profile for tight enterprise limits:
+
+```bash
+export MAX_READ_BYTES=120000
+export READ_BUDGET_MAX_FILES=25
+export READ_BUDGET_MAX_TOTAL_BYTES=350000
+```
 
 ## Configuration
 
-Set in `tdd.sh`:
+Main config in `tdd.sh`:
 
 ```bash
 TEST_DIRS="tests"
@@ -64,14 +113,16 @@ BUILD_CMD="npm run build"
 TEST_CMD="npm test"
 ```
 
-Optional env:
-
+Useful environment variables:
+- `TDD_AGENT_BIN` (`claude` or `codex`)
+- `TDD_AGENT_EXTRA_ARGS` (extra flags passed to selected CLI)
+- `PROMPT_DIR` (default `.claude/prompts`; auto-switches to `.codex/prompts` when present and using Codex)
 - `TDD_LOG_DIR`
 - `TDD_AUTO_MERGE`
 - `TDD_DELETE_BRANCH`
 - `TDD_BASE_BRANCH`
 
-## Aliases (Optional)
+## Aliases
 
 ```bash
 source tdd-aliases.sh
@@ -80,23 +131,32 @@ tdd-red docs/feature.md
 tdd-green
 tdd-refactor
 tdd-ship docs/feature.md
-tdd-full docs/feature.md
-tdd-status
-tdd-unlock
+
+# Codex-mode aliases
+tddc-red docs/feature.md
+tddc-green
+tddc-refactor
+tddc-ship docs/feature.md
 ```
 
-## Standalone Install
+## Installer behavior
 
-For non-monorepo projects only:
-
-```bash
-/path/to/claude-tdd-kit/install.sh
-```
-
-In this monorepo, use `tools/bootstrap` at repo root instead.
+`install.sh` copies kit files into your target project:
+- Creates `tdd.sh`, `tdd-aliases.sh`, scripts, `.claude/prompts`, `.codex/prompts`, hook, templates.
+- Leaves existing project state files intact (`PRD.md`, `LAST_TOUCH.md`, `CLAUDE.md`, `AGENTS.md`) unless missing.
+- `--upgrade` mode updates machinery and backs up config where appropriate.
 
 ## Troubleshooting
 
-- Hook not firing: ensure `.claude/settings.json` registers the hook and `chmod +x .claude/hooks/pre-tool-use.sh`.
-- Tests left read-only after interruption: run `tdd-unlock` (or restore permissions manually).
-- GREEN blocks on test edits: expected behavior; implementation should change source code, not tests.
+- Tests left read-only after interruption:
+```bash
+tdd-unlock
+```
+
+- Hook not firing:
+- Ensure `.claude/settings.json` contains `Read|Edit|Write|MultiEdit|Bash` matcher.
+- Ensure hook is executable: `chmod +x .claude/hooks/pre-tool-use.sh`.
+
+- GREEN appears to “fight” tests:
+- Expected if agent tries to modify tests.
+- Keep iterating implementation only; tests are the spec.
