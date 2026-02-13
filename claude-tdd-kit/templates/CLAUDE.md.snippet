@@ -12,6 +12,8 @@
 - Don't read `PRD.md` unless you need requirements for a new feature. `LAST_TOUCH.md` has the current state.
 - Don't check if dependencies are installed — they are.
 - Don't read source files to understand architecture — read the `README.md` in each directory first.
+- **Don't independently verify kit sub-agent work.** Each phase (red, green, refactor) spawns a dedicated sub-agent that does its own verification. Trust the exit code and capsule. Do NOT re-run tests, re-read logs, re-check build output, or otherwise duplicate work the sub-agent already did. Exit 0 = done. Exit 1 = read the capsule for the failure, don't grep the log.
+- Don't read phase log files after a successful phase. Logs are for debugging failures only.
 
 ## Breadcrumb Maintenance (MANDATORY)
 
