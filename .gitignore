@@ -1,0 +1,12 @@
+# Master run artifacts
+runs/*
+!runs/.gitkeep
+
+# Generated interop traffic
+interop/requests/*.json
+!interop/requests/.gitkeep
+interop/responses/*.json
+!interop/responses/.gitkeep
+
+# Local logs
+*.log
