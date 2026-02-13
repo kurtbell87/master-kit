@@ -5,8 +5,9 @@
 #   ./tdd.sh red   <spec-file>     # Write tests from spec
 #   ./tdd.sh green                 # Implement to pass tests
 #   ./tdd.sh refactor              # Refactor while keeping tests green
+#   ./tdd.sh breadcrumbs <spec-file> # Update docs (LAST_TOUCH.md, CLAUDE.md, AGENTS.md, READMEs)
 #   ./tdd.sh ship  <spec-file>     # Commit, create PR, archive spec
-#   ./tdd.sh full  <spec-file>     # Run all four phases sequentially
+#   ./tdd.sh full  <spec-file>     # Run all phases sequentially (ship includes breadcrumbs)
 #   ./tdd.sh watch [phase] [--resolve]  # Live-tail or summarize a phase log
 #
 # Configure via environment variables or edit the defaults below.
@@ -408,8 +409,59 @@ Start by running the full test suite to confirm your green baseline, then refact
   _phase_summary "refactor" "$exit_code"
 }
 
+run_breadcrumbs() {
+  # Update navigation docs before shipping commits.
+  local spec_file="${1:?Usage: run_breadcrumbs <spec-file>}"
+  local breadcrumbs_prompt="$PROMPT_DIR/tdd-breadcrumbs.md"
+
+  if [[ ! -f "$spec_file" ]]; then
+    echo -e "${RED}Error: Spec file not found: $spec_file${NC}" >&2
+    exit 1
+  fi
+
+  if [[ ! -f "$breadcrumbs_prompt" ]]; then
+    echo -e "${RED}Error: Breadcrumb prompt not found: $breadcrumbs_prompt${NC}" >&2
+    exit 1
+  fi
+
+  echo ""
+  echo -e "${BLUE}======================================================${NC}"
+  echo -e "${BLUE}  TDD BREADCRUMBS PHASE -- Updating navigation docs${NC}"
+  echo -e "${BLUE}======================================================${NC}"
+  echo -e "  Spec: $spec_file"
+  echo ""
+
+  export TDD_PHASE="breadcrumbs"
+  local exit_code=0
+
+  local changed_files
+  changed_files=$(git diff --name-only HEAD 2>/dev/null || echo 'unknown')
+
+  local system_prompt
+  system_prompt="$(cat "$breadcrumbs_prompt")
+
+## Context
+- Spec file: $spec_file
+- Source directory: $SRC_DIR
+- Test directories: $TEST_DIRS
+- Build command: $BUILD_CMD
+- Test command: ./scripts/test-summary.sh $TEST_CMD
+- Full test log: $TDD_LOG_DIR/test-output.log (Read this file for detailed failure tracebacks)
+- Files changed in this cycle:
+$changed_files
+
+Read the spec and update breadcrumb files with accurate status/counts."
+
+  local user_prompt
+  user_prompt="Read the spec and update CLAUDE.md, AGENTS.md, LAST_TOUCH.md, and affected directory README.md files before shipping."
+
+  run_agent "breadcrumbs" "$system_prompt" "$user_prompt" "Read,Write,Edit,Bash,Glob,Grep" || exit_code=$?
+
+  _phase_summary "breadcrumbs" "$exit_code"
+}
+
 run_ship() {
-  # Ship the results of a TDD cycle: commit, PR, optionally merge.
+  # Ship the results of a TDD cycle: breadcrumbs, commit, PR, optionally merge.
   # Called with the spec file path so we can derive the branch name.
   local spec_file="${1:?Usage: run_ship <spec-file>}"
   local feature_name
@@ -418,9 +470,12 @@ run_ship() {
 
   echo ""
   echo -e "${YELLOW}======================================================${NC}"
-  echo -e "${YELLOW}  SHIPPING -- commit, PR, archive spec${NC}"
+  echo -e "${YELLOW}  SHIPPING -- breadcrumbs, commit, PR, archive spec${NC}"
   echo -e "${YELLOW}======================================================${NC}"
   echo ""
+
+  # Breadcrumbs are mandatory before commit.
+  run_breadcrumbs "$spec_file"
 
   # Create feature branch
   git checkout -b "$branch" 2>/dev/null || git checkout "$branch"
@@ -529,6 +584,7 @@ case "${1:-help}" in
   red)      shift; run_red "$@" ;;
   green)    run_green ;;
   refactor) run_refactor ;;
+  breadcrumbs) shift; run_breadcrumbs "$@" ;;
   ship)     shift; run_ship "$@" ;;
   full)     shift; run_full "$@" ;;
   watch)    shift; python3 scripts/tdd-watch.py "$@" ;;
@@ -539,8 +595,9 @@ case "${1:-help}" in
     echo "  red   <spec-file>   Write failing tests from design spec"
     echo "  green               Implement minimum code to pass tests"
     echo "  refactor            Refactor while keeping tests green"
+    echo "  breadcrumbs <spec-file> Update docs before shipping commits"
     echo "  ship  <spec-file>   Commit, create PR, archive spec"
-    echo "  full  <spec-file>   Run all four phases (red -> green -> refactor -> ship)"
+    echo "  full  <spec-file>   Run all phases (red -> green -> refactor -> ship, with breadcrumbs)"
     echo "  watch [phase]       Live-tail a running phase (--resolve for summary)"
     echo ""
     echo "Environment:"

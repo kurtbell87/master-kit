@@ -7,6 +7,7 @@
 #   tdd-red docs/my-feature.md
 #   tdd-green
 #   tdd-refactor
+#   tdd-breadcrumbs docs/my-feature.md
 #   tdd-ship docs/my-feature.md
 #   tdd-full docs/my-feature.md
 #   tddc-red docs/my-feature.md   # same phases via Codex backend
@@ -18,11 +19,13 @@ TDD_SCRIPT="./tdd.sh"
 alias tdd-red='bash $TDD_SCRIPT red'
 alias tdd-green='bash $TDD_SCRIPT green'
 alias tdd-refactor='bash $TDD_SCRIPT refactor'
+alias tdd-breadcrumbs='bash $TDD_SCRIPT breadcrumbs'
 alias tdd-ship='bash $TDD_SCRIPT ship'
 alias tdd-full='bash $TDD_SCRIPT full'
 alias tddc-red='TDD_AGENT_BIN=codex bash $TDD_SCRIPT red'
 alias tddc-green='TDD_AGENT_BIN=codex bash $TDD_SCRIPT green'
 alias tddc-refactor='TDD_AGENT_BIN=codex bash $TDD_SCRIPT refactor'
+alias tddc-breadcrumbs='TDD_AGENT_BIN=codex bash $TDD_SCRIPT breadcrumbs'
 alias tddc-ship='TDD_AGENT_BIN=codex bash $TDD_SCRIPT ship'
 alias tddc-full='TDD_AGENT_BIN=codex bash $TDD_SCRIPT full'
 

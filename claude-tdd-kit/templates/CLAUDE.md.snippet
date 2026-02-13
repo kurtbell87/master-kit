@@ -29,7 +29,7 @@ The goal: a new agent session should be able to orient itself by reading only `C
 
 ## How You Work: TDD Workflow (MANDATORY)
 
-This project uses **strict red-green-refactor TDD**. You MUST follow this 4-step process for ALL new work. You do NOT implement code directly — you orchestrate the TDD pipeline.
+This project uses **strict red-green-refactor TDD with mandatory breadcrumbs**. You MUST follow this process for ALL new work. You do NOT implement code directly — you orchestrate the TDD pipeline.
 
 ### Backend Selection (Claude or Codex)
 
@@ -96,7 +96,17 @@ This spawns a dedicated refactoring agent that improves code quality while keepi
 
 **Output is compact by design.** Full details are in `$TDD_LOG_DIR/refactor.log`.
 
-### Step 5: SHIP — Commit, PR, Archive
+### Step 5: BREADCRUMBS — Update Navigation Docs
+
+**You MUST run this command before shipping.**
+
+```bash
+./tdd.sh breadcrumbs docs/<feature>.md
+```
+
+This updates `CLAUDE.md`, `AGENTS.md`, `LAST_TOUCH.md`, and affected directory `README.md` files so the next session can cold-start quickly.
+
+### Step 6: SHIP — Commit, PR, Archive
 
 After refactor, ship the results:
 
@@ -104,7 +114,7 @@ After refactor, ship the results:
 ./tdd.sh ship docs/<feature>.md
 ```
 
-This creates a feature branch (`tdd/<feature>`), commits all changes, opens a PR, and deletes the spec file from the working tree (preserved in git history).
+This creates a feature branch (`tdd/<feature>`), commits all changes, opens a PR, and deletes the spec file from the working tree (preserved in git history). `ship` runs breadcrumbs first as a safety check.
 
 Configure via env vars:
 - `TDD_AUTO_MERGE=true` — auto-merge the PR after creation
@@ -115,7 +125,7 @@ Or run all phases in one command: `./tdd.sh full docs/<feature>.md`
 
 ### Critical Rules
 
-- **You are the orchestrator, not the implementor.** Steps 2-4 MUST use `./tdd.sh` commands.
+- **You are the orchestrator, not the implementor.** Steps 2-5 MUST use `./tdd.sh` commands.
 - **Step 1 is the only step where you write files directly** (the spec).
 - **One spec per cycle.** Don't try to spec everything at once.
 - If a `./tdd.sh` phase fails, diagnose and re-run the phase. Do not manually patch implementation code outside the pipeline.
