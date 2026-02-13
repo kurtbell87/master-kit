@@ -1,0 +1,41 @@
+name: master-kit-smoke
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Ensure executable bits
+        run: |
+          chmod +x tools/kit
+          chmod +x tools/pump
+          chmod +x tools/query-log
+          chmod +x tools/validate-capsules
+          chmod +x tools/validate-manifests
+          chmod +x tools/smoke-run
+          chmod +x .claude/hooks/pre-tool-use.sh
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Smoke run
+        run: tools/smoke-run
+
+      - name: Validate all current runs
+        run: |
+          tools/validate-capsules runs
+          tools/validate-manifests --check-files runs
