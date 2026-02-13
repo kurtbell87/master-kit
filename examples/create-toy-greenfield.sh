@@ -485,8 +485,11 @@ touch tests/__init__.py
 # --- Lean4 project (for math kit formalization) ---
 if command -v lake &>/dev/null; then
   echo "[toy] initializing Lean4 project for math kit"
+  # Use shared package cache to avoid duplicating mathlib (~2GB) per project.
+  export LAKE_PACKAGES_DIR="${LAKE_PACKAGES_DIR:-$HOME/.lake/packages}"
+  mkdir -p "$LAKE_PACKAGES_DIR"
   lake init fib_fast_lean math 2>&1 | head -5
-  echo "[toy]   Lean4 project initialized"
+  echo "[toy]   Lean4 project initialized (shared cache: $LAKE_PACKAGES_DIR)"
 else
   echo "[toy] WARN: lake not found — math kit FORMALIZE/PROVE phases will fail"
   echo "[toy]   install elan (https://github.com/leanprover/elan) to enable"

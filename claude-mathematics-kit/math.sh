@@ -135,9 +135,7 @@ check_axioms() {
 extract_theorem_signatures() {
   # Extract all theorem/lemma names from .lean files
   while IFS= read -r f; do
-    grep -nE '^\s*(theorem|lemma|instance)\s+' "$f" 2>/dev/null | while IFS= read -r line; do
-      echo "$f:$line"
-    done
+    grep -nE '^\s*(theorem|lemma|instance)\s+' "$f" 2>/dev/null || true
   done < <(find_lean_files)
 }
 
@@ -306,7 +304,7 @@ run_status() {
   # Theorem list
   echo ""
   echo -e "${CYAN}Theorems:${NC}"
-  extract_theorem_signatures | while IFS= read -r sig; do
+  { extract_theorem_signatures || true; } | while IFS= read -r sig; do
     echo "  $sig"
   done
   echo ""
@@ -323,7 +321,7 @@ run_status() {
   if [[ -f "$CONSTRUCTIONS_FILE" ]]; then
     echo ""
     echo -e "${CYAN}Construction Queue ($CONSTRUCTIONS_FILE):${NC}"
-    grep -E '^\| P[0-9]' "$CONSTRUCTIONS_FILE" 2>/dev/null | while IFS= read -r line; do
+    { grep -E '^\| P[0-9]' "$CONSTRUCTIONS_FILE" 2>/dev/null || true; } | while IFS= read -r line; do
       echo "  $line"
     done
   fi
