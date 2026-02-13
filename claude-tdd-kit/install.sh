@@ -119,12 +119,14 @@ upgrade_config_executable "$KIT_DIR/.claude/hooks/pre-tool-use.sh"     "$TARGET_
 upgrade_machinery         "$KIT_DIR/.claude/prompts/tdd-red.md"        "$TARGET_DIR/.claude/prompts/tdd-red.md"
 upgrade_machinery         "$KIT_DIR/.claude/prompts/tdd-green.md"      "$TARGET_DIR/.claude/prompts/tdd-green.md"
 upgrade_machinery         "$KIT_DIR/.claude/prompts/tdd-refactor.md"   "$TARGET_DIR/.claude/prompts/tdd-refactor.md"
+upgrade_machinery         "$KIT_DIR/.claude/prompts/tdd-breadcrumbs.md" "$TARGET_DIR/.claude/prompts/tdd-breadcrumbs.md"
 
 echo ""
 echo -e "${BOLD}Codex prompt pack:${NC}"
 upgrade_machinery         "$KIT_DIR/.codex/prompts/tdd-red.md"        "$TARGET_DIR/.codex/prompts/tdd-red.md"
 upgrade_machinery         "$KIT_DIR/.codex/prompts/tdd-green.md"      "$TARGET_DIR/.codex/prompts/tdd-green.md"
 upgrade_machinery         "$KIT_DIR/.codex/prompts/tdd-refactor.md"   "$TARGET_DIR/.codex/prompts/tdd-refactor.md"
+upgrade_machinery         "$KIT_DIR/.codex/prompts/tdd-breadcrumbs.md" "$TARGET_DIR/.codex/prompts/tdd-breadcrumbs.md"
 
 # ── Settings (config) ──
 if [[ "$UPGRADE" == "true" ]]; then

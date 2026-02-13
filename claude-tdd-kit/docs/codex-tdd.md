@@ -8,6 +8,7 @@ The standard TDD workflow can run on Codex CLI with the same phase commands.
 TDD_AGENT_BIN=codex ./tdd.sh red docs/my-feature.md
 TDD_AGENT_BIN=codex ./tdd.sh green
 TDD_AGENT_BIN=codex ./tdd.sh refactor
+TDD_AGENT_BIN=codex ./tdd.sh breadcrumbs docs/my-feature.md
 TDD_AGENT_BIN=codex ./tdd.sh ship docs/my-feature.md
 ```
 
@@ -19,6 +20,7 @@ source ./tdd-aliases.sh
 tddc-red docs/my-feature.md
 tddc-green
 tddc-refactor
+tddc-breadcrumbs docs/my-feature.md
 tddc-ship docs/my-feature.md
 ```
 
@@ -27,4 +29,5 @@ tddc-ship docs/my-feature.md
 - Installer writes both `.claude/prompts` and `.codex/prompts`.
 - Codex mode prefers `.codex/prompts` automatically (or use `PROMPT_DIR` override).
 - Keep `AGENTS.md` updated (install from `templates/AGENTS.md.snippet`) for Codex-first projects.
+- `ship` runs the breadcrumbs phase before commit/PR so docs are always refreshed.
 - Logs are still written to `$TDD_LOG_DIR` and summarized compactly on stdout.

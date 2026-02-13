@@ -1,6 +1,6 @@
 # Claude TDD Kit
 
-Strict red-green-refactor orchestration for AI coding agents with role separation, test immutability in GREEN, compact phase summaries, and token-bloat guardrails.
+Strict red-green-refactor orchestration for AI coding agents with role separation, mandatory breadcrumbs before ship, test immutability in GREEN, compact phase summaries, and token-bloat guardrails.
 
 Supports both:
 - Claude Code CLI (`claude`)
@@ -21,8 +21,11 @@ This kit is tuned for constrained context windows:
 | RED | `./tdd.sh red <spec-file>` | Write failing tests from spec |
 | GREEN | `./tdd.sh green` | Implement to pass tests |
 | REFACTOR | `./tdd.sh refactor` | Improve design while tests stay green |
-| SHIP | `./tdd.sh ship <spec-file>` | Commit, create PR, archive spec |
+| BREADCRUMBS | `./tdd.sh breadcrumbs <spec-file>` | Update CLAUDE/AGENTS/LAST_TOUCH/README docs |
+| SHIP | `./tdd.sh ship <spec-file>` | Run breadcrumbs, then commit/create PR/archive spec |
 | FULL | `./tdd.sh full <spec-file>` | Run RED -> GREEN -> REFACTOR -> SHIP |
+
+`ship` enforces breadcrumbs automatically, so docs are updated before commit creation.
 
 ## Quick start
 
@@ -37,6 +40,7 @@ $EDITOR tdd.sh
 ./tdd.sh red docs/my-feature.md
 ./tdd.sh green
 ./tdd.sh refactor
+./tdd.sh breadcrumbs docs/my-feature.md
 ./tdd.sh ship docs/my-feature.md
 ```
 
@@ -54,6 +58,7 @@ Run the same workflow with Codex:
 TDD_AGENT_BIN=codex ./tdd.sh red docs/my-feature.md
 TDD_AGENT_BIN=codex ./tdd.sh green
 TDD_AGENT_BIN=codex ./tdd.sh refactor
+TDD_AGENT_BIN=codex ./tdd.sh breadcrumbs docs/my-feature.md
 ```
 
 Optional shell-level default:
@@ -64,7 +69,7 @@ export TDD_AGENT_BIN=codex
 
 ## Logs, summaries, and watch mode
 
-- Full phase logs: `$TDD_LOG_DIR/{red,green,refactor}.log`
+- Full phase logs: `$TDD_LOG_DIR/{red,green,refactor,breadcrumbs}.log`
 - Full test output: `$TDD_LOG_DIR/test-output.log`
 - Default log dir: `/tmp/tdd-<project>/`
 - Phase stdout: compact summary only (for context efficiency)
@@ -130,12 +135,14 @@ source tdd-aliases.sh
 tdd-red docs/feature.md
 tdd-green
 tdd-refactor
+tdd-breadcrumbs docs/feature.md
 tdd-ship docs/feature.md
 
 # Codex-mode aliases
 tddc-red docs/feature.md
 tddc-green
 tddc-refactor
+tddc-breadcrumbs docs/feature.md
 tddc-ship docs/feature.md
 ```
 
